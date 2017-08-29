@@ -151,7 +151,7 @@ class SluggableSubscriber implements EventSubscriber
                 $id = $event == 'preUpdate' && method_exists($object, 'getId') ? $object->getId() : null;
 
                 // generate unique slug
-                $slug = $this->generateUniqueSlug($om, $object, $propertyMetadata->name, $slug, $id);
+                $slug = $this->generateUniqueSlug($om, $object, $propertyMetadata->name, $slug, $id, $propertyMetadata->slugFields);
 
                 $propertyMetadata->setValue($object, $slug);
                 $this->recomputeSingleObjectChangeSet($om, $object);
@@ -179,15 +179,33 @@ class SluggableSubscriber implements EventSubscriber
     }
 
     /**
+     * @param object $object
+     * @param mixed $value
+     * @param array $fields
+     * @return bool
+     */
+    protected function checkIfFieldValue($object, $value, $fields)
+    {
+        foreach ($fields as $field) {
+            if ($value == $this->propertyAccessor->getValue($object, $field)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * @param ObjectManager|DocumentManager|EntityManager $om
      * @param object                                      $object
      * @param string                                      $field
      * @param string                                      $slug
      * @param string                                      $id
+     * @param array                                       $slugFields
      *
      * @return string
      */
-    protected function generateUniqueSlug(ObjectManager $om, $object, $field, $slug, $id = null)
+    protected function generateUniqueSlug(ObjectManager $om, $object, $field, $slug, $id = null, $slugFields = [])
     {
         if (!trim($slug)) {
             return null;
@@ -202,11 +220,11 @@ class SluggableSubscriber implements EventSubscriber
         // slug with counter pattern
         $pattern = '/(.+)-(\d+)$/i';
 
-        // @todo fix slug with integer at the end (not the unique counter)
-
         if (preg_match($pattern, $slug, $match)) {
-            // remove counter from slug
-            $slug = $match[1];
+            if (!empty($slugFields) && !$this->checkIfFieldValue($object, $match[2], $slugFields)) {
+                // remove counter from slug
+                $slug = $match[1];
+            }
         }
 
         $objects = $this->findSimilarSlugs($om, $class, $field, $slug);
@@ -230,7 +248,6 @@ class SluggableSubscriber implements EventSubscriber
                     }
                 }
             }
-
         }
 
         return $slug;
