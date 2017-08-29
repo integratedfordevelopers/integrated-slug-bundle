@@ -171,7 +171,8 @@ class SluggableSubscriber implements EventSubscriber
                     $propertyMetadata->name,
                     $slug,
                     $propertyMetadata->slugSeparator,
-                    $id
+                    $id,
+                    $propertyMetadata->slugFields
                 );
 
                 $propertyMetadata->setValue($object, $slug);
@@ -200,16 +201,34 @@ class SluggableSubscriber implements EventSubscriber
     }
 
     /**
+     * @param object $object
+     * @param mixed $value
+     * @param array $fields
+     * @return bool
+     */
+    protected function checkIfFieldValue($object, $value, $fields)
+    {
+        foreach ($fields as $field) {
+            if ($value == $this->propertyAccessor->getValue($object, $field)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * @param ObjectManager|DocumentManager|EntityManager $om
      * @param object                                      $object
      * @param string                                      $field
      * @param string                                      $slug
      * @param string                                      $separator
      * @param string                                      $id
+     * @param array                                       $slugFields
      *
      * @return string
      */
-    protected function generateUniqueSlug(ObjectManager $om, $object, $field, $slug, $separator = '-', $id = null)
+    protected function generateUniqueSlug(ObjectManager $om, $object, $field, $slug, $separator = '-', $id = null, $slugFields = [])
     {
         if (!trim($slug)) {
             return null;
@@ -224,11 +243,12 @@ class SluggableSubscriber implements EventSubscriber
         // slug with counter pattern
         $pattern = '/(.+)' . preg_quote($separator, '/') . '(\d+)$/i';
 
-        // @todo fix slug with integer at the end (not the unique counter) (INTEGRATED-294)
-
         if (preg_match($pattern, $slug, $match)) {
-            // remove counter from slug
-            $slug = $match[1];
+            // Check if integer at the end of the slug matches any slug fields, if not, remove the int
+            if (!$this->checkIfFieldValue($object, $match[2], $slugFields)) {
+                // remove counter from slug
+                $slug = $match[1];
+            }
         }
 
         $objects = $this->findSimilarSlugs($om, $class, $field, $slug, $separator);
@@ -253,7 +273,6 @@ class SluggableSubscriber implements EventSubscriber
                     }
                 }
             }
-
         }
 
         return $slug;
